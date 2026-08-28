@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit';
 import { RebaseAction, RebaseEntry } from '../../types/rebase';
 import { pick } from '../shared/i18n';
 import { formatFullDate } from '../shared/date';
+import { parseConventional, scopeColor, scopeOf } from '../shared/conventional-commit';
 
 declare global {
     interface Window {
@@ -28,6 +29,12 @@ const L = pick(
         orderNewestTop: 'Newest on top',
         orderOldestTop: 'Oldest on top',
         orderToggleHint: 'Toggle display order',
+        group: 'Group by scope',
+        groupHint:
+            'Reorder the plan so commits sharing a Conventional Commits scope — feat(frontend), fix(backend)… — become contiguous. Chronological order is kept inside each group, and unscoped commits go last. "Restart" undoes it.',
+        groupHintDisabled: 'Needs at least two different scopes in the commit messages.',
+        scopeHint: (scope: string) => `Scope: ${scope}`,
+        noScopeHint: 'No scope in this message',
         preview: 'Preview',
         previewHint: 'Preview the final result',
         previewTitle: 'Final result',
@@ -66,6 +73,12 @@ const L = pick(
         orderNewestTop: 'Plus récent en haut',
         orderOldestTop: 'Plus ancien en haut',
         orderToggleHint: "Inverser l'ordre d'affichage",
+        group: 'Grouper par scope',
+        groupHint:
+            "Réordonne le plan pour rendre contigus les commits partageant un même scope Conventional Commits — feat(frontend), fix(backend)… L'ordre chronologique est conservé dans chaque groupe, et les commits sans scope passent à la fin. « Recommencer » annule l'opération.",
+        groupHintDisabled: 'Il faut au moins deux scopes différents dans les messages de commit.',
+        scopeHint: (scope: string) => `Scope : ${scope}`,
+        noScopeHint: 'Aucun scope dans ce message',
         preview: 'Aperçu',
         previewHint: 'Prévisualiser le résultat final',
         previewTitle: 'Résultat final',
@@ -162,6 +175,28 @@ function computeFinalCommits(entries: RebaseEntry[]): FinalCommit[] {
         });
     }
     return result;
+}
+
+/**
+ * Rassemble les commits d'un même scope Conventional Commits. Les groupes sortent dans
+ * l'ordre de première apparition et gardent leur ordre chronologique interne, pour que
+ * le plan reste aussi proche que possible de l'historique d'origine ; les commits sans
+ * scope passent en fin de liste, où ils ne coupent aucun groupe.
+ */
+function groupEntriesByScope(entries: RebaseEntry[]): RebaseEntry[] {
+    const groups = new Map<string, RebaseEntry[]>();
+    for (const entry of entries) {
+        const key = scopeOf(entry.message);
+        const group = groups.get(key);
+        if (group) {
+            group.push(entry);
+        } else {
+            groups.set(key, [entry]);
+        }
+    }
+    const unscoped = groups.get('') ?? [];
+    groups.delete('');
+    return [...[...groups.values()].flat(), ...unscoped];
 }
 
 export class YorgitRebase extends LitElement {
@@ -355,6 +390,17 @@ export class YorgitRebase extends LitElement {
         this._done = false;
     }
 
+    /**
+     * Le regroupement déplace réellement les entrées de this._entries : squash/fixup se
+     * rattachant au commit actif précédent, leur cible peut changer — c'est le même effet
+     * qu'un déplacement à la souris, et « Recommencer » restaure le plan initial.
+     */
+    private _groupByScope() {
+        this._entries = groupEntriesByScope(this._entries);
+        this._draggingIdx = null;
+        this._dragOverIdx = null;
+    }
+
     /** Inverse l'ordre d'affichage (plus récent en haut) sans toucher à this._entries. */
     private _toggleOrder() {
         this._reversed = !this._reversed;
@@ -430,6 +476,15 @@ export class YorgitRebase extends LitElement {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border-color: var(--vscode-button-background);
+        }
+
+        .btn-toggle:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .btn-toggle:disabled:hover {
+            background: var(--vscode-button-secondaryBackground);
         }
 
         .body-split {
@@ -802,6 +857,33 @@ export class YorgitRebase extends LitElement {
             width: 90px;
             flex-shrink: 0;
         }
+
+        /* Badge de scope Conventional Commits — couleur stable par scope (voir
+           scopeColor), ce qui rend les groupes repérables sans lire les messages. */
+        .entry-scope {
+            flex-shrink: 0;
+            max-width: 130px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 10px;
+            line-height: 16px;
+            padding: 0 6px;
+            border-radius: 8px;
+            font-weight: 600;
+            color: var(--scope, var(--vscode-descriptionForeground));
+            background: color-mix(in srgb, var(--scope, var(--vscode-descriptionForeground)) 16%, transparent);
+            border: 1px solid color-mix(in srgb, var(--scope, var(--vscode-descriptionForeground)) 40%, transparent);
+        }
+
+        .entry-scope.unscoped {
+            font-weight: 400;
+            opacity: 0.75;
+        }
+
+        .entry-row.drop .entry-scope {
+            opacity: 0.55;
+        }
     `;
 
     /**
@@ -813,6 +895,13 @@ export class YorgitRebase extends LitElement {
     private renderEntry(entry: RebaseEntry, realIdx: number, displayIdx: number, total: number) {
         const isFirst = displayIdx === 0;
         const isLast = displayIdx === total - 1;
+        // Le badge reprend l'en-tête conventionnel, le message n'affiche donc que la
+        // description — le message réel envoyé à git reste évidemment intact.
+        const conventional = parseConventional(entry.message);
+        const scope = conventional?.scope ?? '';
+        // Couleur calculée sur la clé normalisée : « Frontend » et « frontend » sont
+        // regroupés ensemble, ils doivent donc porter le même badge.
+        const scopeHue = scopeColor(scopeOf(entry.message));
         const accent = ACTION_ACCENT[entry.action];
         const rowClasses = [
             'entry-row',
@@ -870,6 +959,14 @@ export class YorgitRebase extends LitElement {
                 </select>
                 <span class="entry-hash">${entry.shortHash}</span>
                 <span class="entry-date" title=${formatFullDate(entry.isoDate)}>${entry.date}</span>
+                ${conventional
+                    ? html`<span
+                          class="entry-scope ${scope ? '' : 'unscoped'}"
+                          style=${scopeHue ? `--scope: ${scopeHue}` : ''}
+                          title=${scope ? L.scopeHint(scope) : L.noScopeHint}
+                          >${scope || conventional.type}${conventional.breaking ? '!' : ''}</span
+                      >`
+                    : ''}
                 ${entry.action === 'reword'
                     ? html`<input
                           class="reword-input"
@@ -879,7 +976,9 @@ export class YorgitRebase extends LitElement {
                           @input=${(e: InputEvent) =>
                               this._setNewMessage(realIdx, (e.target as HTMLInputElement).value)}
                       />`
-                    : html`<span class="entry-msg" title=${entry.message}>${entry.message}</span>`}
+                    : html`<span class="entry-msg" title=${entry.message}
+                          >${conventional?.description ?? entry.message}</span
+                      >`}
             </div>
         `;
     }
@@ -936,6 +1035,9 @@ export class YorgitRebase extends LitElement {
 
         const activeCount = this._entries.filter(e => e.action !== 'drop').length;
         const total = this._entries.length;
+        // Le bouton ne s'active que si le regroupement changerait réellement le plan —
+        // scopes déjà contigus, scope unique ou aucun scope : rien à faire.
+        const canGroup = groupEntriesByScope(this._entries).some((e, i) => e !== this._entries[i]);
         // La liste affichée ne fait qu'inverser l'ordre de rendu — realIdx conserve
         // la position dans this._entries pour que les mutations restent correctes.
         const displayList = this._entries.map((entry, realIdx) => ({ entry, realIdx }));
@@ -950,6 +1052,14 @@ export class YorgitRebase extends LitElement {
                     <div class="header-sub">${L.headerSub(total, this._reversed)}</div>
                 </div>
                 <div class="header-actions">
+                    <button
+                        class="btn-toggle"
+                        title=${canGroup ? L.groupHint : L.groupHintDisabled}
+                        ?disabled=${!canGroup || this._running}
+                        @click=${this._groupByScope}
+                    >
+                        ⧉ ${L.group}
+                    </button>
                     <button
                         class="btn-toggle ${this._showPreview ? 'active' : ''}"
                         title=${L.previewHint}

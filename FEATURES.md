@@ -78,6 +78,8 @@
 - [x] Glisser-déposer pour réordonner les commits du rebase interactif (en plus des flèches Haut/Bas, conservées pour l'accessibilité clavier)
 - [x] Glisser-déposer désactivé sur la ligne quand le geste part d'un contrôle (champ reword, select d'action) — permet de sélectionner le texte du message à la souris
 - [x] Bouton pour inverser l'ordre d'affichage du rebase interactif (plus récent en haut) — vue seulement, l'ordre envoyé à git reste toujours plus ancien en premier
+- [x] Badge de scope Conventional Commits sur chaque ligne du rebase interactif (`feat(frontend)` → badge « frontend » de couleur stable, le message n'affiche plus que la description ; badge gris pour les commits sans scope, aucun badge pour les messages non conventionnels)
+- [x] Bouton « Grouper par scope » dans le rebase interactif — rassemble les commits d'un même scope (frontend, backend, infra…), ordre chronologique conservé dans chaque groupe, commits sans scope en fin de liste ; désactivé quand le regroupement ne changerait rien
 - [x] Volet "Aperçu" rétractable montrant le résultat final du rebase (squash/fixup fondus, drop exclus, reword avec le nouveau message) avant de cliquer sur "Lancer le rebase"
 - [x] Ajouter un tag sur un commit (depuis l'historique, avec push optionnel)
 - [x] Supprimer un tag (depuis l'historique, avec suppression distante optionnelle)
