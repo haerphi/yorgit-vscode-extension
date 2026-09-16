@@ -77,6 +77,12 @@ export class ConflictPanel {
                     const stillConflicted = repo.state.mergeChanges.some(c => c.uri.fsPath === currentFsPath);
                     if (!stillConflicted) {
                         panel.dispose();
+                        // L'éditeur prend la place de l'onglet de résolution pour enchaîner
+                        // directement sur la relecture du résultat.
+                        await vscode.window.showTextDocument(vscode.Uri.file(currentFsPath), {
+                            viewColumn: vscode.ViewColumn.One,
+                            preview: false,
+                        });
                         return;
                     }
 

@@ -93,7 +93,7 @@
 - [x] Section "Conflits" dédiée dans la vue Changes, affichée uniquement quand des fichiers sont en conflit (icône warning, clic → panneau de résolution)
 - [x] Résolution visuelle des conflits (Current / Theirs / Final)
 - [x] Clic sur le badge "N non résolu(s)" → défilement animé jusqu'au premier conflit non résolu
-- [x] "Save and stage" ferme automatiquement la vue si le fichier n'a plus de conflit après le staging (vérifié via mergeChanges)
+- [x] "Save and stage" ferme automatiquement la vue si le fichier n'a plus de conflit après le staging (vérifié via mergeChanges) et ouvre le fichier résolu dans l'éditeur à sa place
 - [x] Menu contextuel fichier en conflit : "Prendre nos modifications" / "Prendre leurs modifications" (`git checkout --ours|--theirs`)
 - [x] Bouton "Changements du fichier" (haut à droite) : bascule vers le diff complet nôtre↔entrant (`git diff :2 :3`) pour voir les modifications au-delà des conflits
 
