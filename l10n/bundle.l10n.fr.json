@@ -195,6 +195,7 @@
     "Changes": "Modifications",
     "Conflicts": "Conflits",
     "Stage by Hunks/Lines…": "Indexer par hunks/lignes…",
+    "Open File": "Ouvrir le fichier",
     "Unstage by Hunks/Lines…": "Désindexer par hunks/lignes…",
     "current": "actuelle",
     "{0} modified file(s)": "{0} fichier(s) modifié(s)",

@@ -37,6 +37,7 @@
 - [x] Chemin relatif grisé à côté du nom de fichier (désambiguïsation des homonymes)
 - [x] Staging / unstaging de fichiers individuels
 - [x] Staging sélectif par hunks/lignes (diff parsing custom)
+- [x] Clic sur un fichier créé (non suivi ou ajouté à l'index) dans "Changes" → ouverture du fichier dans l'éditeur (pas de diff par hunks possible sans version dans HEAD)
 - [x] Bouton "Afficher tout le fichier" dans la vue diff (indexation/stash) — replie/déplie les régions de contexte éloignées d'un changement, sans jamais affecter la sélection des hunks/lignes
 - [x] Menu contextuel "Changes" : ouvrir le fichier dans l'éditeur / copier le nom du fichier (Staged, Modifications, Conflits)
 - [x] Stash partiel (sélection de fichiers)

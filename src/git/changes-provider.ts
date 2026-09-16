@@ -1,4 +1,4 @@
-import { Change, Repository } from '@haerphi/vscode-git-api-types';
+import { Change, Repository, Status } from '@haerphi/vscode-git-api-types';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -31,6 +31,11 @@ type ChangeNode = ChangeGroup | ChangeLeaf;
 const STAGED_GROUP: ChangeGroup = { kind: 'group', label: l10n.t('Staged'), resourceGroup: 'staged' };
 const UNSTAGED_GROUP: ChangeGroup = { kind: 'group', label: l10n.t('Changes'), resourceGroup: 'unstaged' };
 const CONFLICT_GROUP: ChangeGroup = { kind: 'group', label: l10n.t('Conflicts'), resourceGroup: 'conflict' };
+
+// Un fichier créé n'a pas d'équivalent dans HEAD : `git diff` est vide pour un fichier
+// non suivi, et une sélection par hunks ne peut pas retirer un ajout de l'index.
+// Le clic ouvre donc simplement le fichier.
+const NEW_FILE_STATUSES = new Set([Status.UNTRACKED, Status.INDEX_ADDED]);
 
 /**
  * Provider de données pour la TreeView "changes".
@@ -109,6 +114,12 @@ export class ChangesProvider implements TreeDataProvider<ChangeNode> {
             item.command = {
                 command: 'haerphi-yorgit.resolve-conflict',
                 title: l10n.t('Resolve Conflict…'),
+                arguments: [node],
+            };
+        } else if (NEW_FILE_STATUSES.has(change.status)) {
+            item.command = {
+                command: 'haerphi-yorgit.open-file',
+                title: l10n.t('Open File'),
                 arguments: [node],
             };
         } else if (resourceGroup === 'unstaged') {
