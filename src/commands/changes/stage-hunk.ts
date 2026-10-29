@@ -7,6 +7,7 @@ import { FileDiff, Hunk, HunkSelection } from '../../types/diff';
 import { ChangeLeaf } from '../../git/changes-provider';
 import { DiffPanel } from '../../ui/DiffPanel';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 // ─── Helpers git ─────────────────────────────────────────────────────────────
 
@@ -264,7 +265,7 @@ async function runHunkCommand(
         const hash = await gitHashObjectWrite(gitApi.git.path, newContent, cwd);
         const { mode } = await gitLsFiles(gitApi.git.path, relPath, cwd);
         await gitUpdateIndex(gitApi.git.path, mode, hash, relPath, cwd);
-        await repo.status();
+        await withGitProgress(() => repo.status());
     } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(

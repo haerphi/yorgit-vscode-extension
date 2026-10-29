@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
+import { withGitProgress } from './git-progress';
 
 /**
  * Canal de sortie "YorGit" partagé — trace chaque commande git et sa sortie.
@@ -88,6 +89,13 @@ function buildSpawnErrorMessage(gitPath: string, err: NodeJS.ErrnoException): st
 }
 
 function spawnGit(gitPath: string, args: string[], cwd: string, opts: RunGitOptions): Promise<Buffer> {
+    // Les appels quiet (blame à chaque mouvement de curseur) ne doivent pas animer l'UI.
+    return opts.quiet
+        ? spawnGitRaw(gitPath, args, cwd, opts)
+        : withGitProgress(() => spawnGitRaw(gitPath, args, cwd, opts));
+}
+
+function spawnGitRaw(gitPath: string, args: string[], cwd: string, opts: RunGitOptions): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const channel = getGitOutputChannel();
         const logLine = (text: string) => {

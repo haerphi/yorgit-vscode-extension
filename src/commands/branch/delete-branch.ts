@@ -4,6 +4,7 @@ import { BranchLeaf } from '../../git/branches-provider';
 import { runGit } from '../../git/git-exec';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Exécute `git push <remote> --delete <branch>` via child_process.
@@ -107,7 +108,7 @@ export function registerDeleteBranch(gitApi: API, context: vscode.ExtensionConte
 
         // Suppression locale — premier essai sans forcer.
         try {
-            await repo.deleteBranch(branchName, false);
+            await withGitProgress(() => repo.deleteBranch(branchName, false));
         } catch {
             // deleteBranch(false) échoue si la branche contient des commits non mergés.
             // On propose un second essai avec force, accompagné d'un avertissement explicite.
@@ -127,7 +128,7 @@ export function registerDeleteBranch(gitApi: API, context: vscode.ExtensionConte
             }
 
             try {
-                await repo.deleteBranch(branchName, true);
+                await withGitProgress(() => repo.deleteBranch(branchName, true));
             } catch (err) {
                 vscode.window.showErrorMessage(
                     vscode.l10n.t('Could not delete branch: {0}', err instanceof Error ? err.message : String(err)),
@@ -150,7 +151,7 @@ export function registerDeleteBranch(gitApi: API, context: vscode.ExtensionConte
             }
         }
 
-        await repo.status();
+        await withGitProgress(() => repo.status());
     });
 
     /**
@@ -214,7 +215,7 @@ export function registerDeleteBranch(gitApi: API, context: vscode.ExtensionConte
 
             try {
                 await gitDeleteRemoteBranch(gitApi.git.path, remoteName, branchName, repo.rootUri.fsPath);
-                await repo.status();
+                await withGitProgress(() => repo.status());
             } catch (err) {
                 vscode.window.showErrorMessage(
                     vscode.l10n.t(

@@ -2,6 +2,7 @@ import { Repository } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { ConflictPanel } from '../ui/ConflictPanel';
 import { API } from '@haerphi/vscode-git-api-types';
+import { withGitProgress } from './git-progress';
 
 /**
  * Après un rebase/merge échoué : appelle repo.status() pour mettre à jour
@@ -13,7 +14,7 @@ export async function offerConflictResolution(
     gitApi: API,
     context: vscode.ExtensionContext,
 ): Promise<void> {
-    await repo.status();
+    await withGitProgress(() => repo.status());
     const conflicted = repo.state.mergeChanges;
     if (conflicted.length === 0) {
         return;

@@ -2,6 +2,7 @@ import { API } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { runGit } from '../../git/git-exec';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 export function registerContinueRebase(gitApi: API): vscode.Disposable {
     return vscode.commands.registerCommand('haerphi-yorgit.continue-rebase', async () => {
@@ -12,7 +13,7 @@ export function registerContinueRebase(gitApi: API): vscode.Disposable {
 
         try {
             await _spawnGit(gitApi.git.path, ['rebase', '--continue'], repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             vscode.window.showInformationMessage(vscode.l10n.t('Rebase continued.'));
         } catch (err) {
             vscode.window.showErrorMessage(

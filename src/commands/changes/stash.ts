@@ -7,6 +7,7 @@ import { StashEntry, StashProvider } from '../../git/stash-provider';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { DiffPanel } from '../../ui/DiffPanel';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * `-u` inclut le diff des fichiers non trackés inclus dans le stash (3ᵉ parent du
@@ -96,7 +97,7 @@ export function registerStash(
 
         try {
             await runGit(gitApi.git.path, args, cwd);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             stashProvider.refresh();
         } catch (err) {
             vscode.window.showErrorMessage(
@@ -166,7 +167,7 @@ export function registerStash(
         }
         try {
             await runGit(gitApi.git.path, ['stash', 'pop', '--index', entry.ref], repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             stashProvider.refresh();
         } catch (err) {
             vscode.window.showErrorMessage(
@@ -182,7 +183,7 @@ export function registerStash(
         }
         try {
             await runGit(gitApi.git.path, ['stash', 'apply', '--index', entry.ref], repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not apply stash: {0}', err instanceof Error ? err.message : String(err)),

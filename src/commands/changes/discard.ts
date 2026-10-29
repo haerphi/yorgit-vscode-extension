@@ -5,6 +5,7 @@ import { ChangeLeaf } from '../../git/changes-provider';
 import { runGit } from '../../git/git-exec';
 import { DiffPanel } from '../../ui/DiffPanel';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 const UNTRACKED_STATUSES = new Set([Status.UNTRACKED, Status.INTENT_TO_ADD, Status.INTENT_TO_RENAME]);
 
@@ -41,7 +42,7 @@ export function registerDiscard(gitApi: API): vscode.Disposable[] {
                 await _spawnGit(gitApi.git.path, ['restore', '--', node.change.uri.fsPath], repo.rootUri.fsPath);
                 await _reloadEditorFromDisk(node.change.uri);
             }
-            await repo.status();
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Discard failed: {0}', err instanceof Error ? err.message : String(err)),
@@ -94,7 +95,7 @@ export function registerDiscard(gitApi: API): vscode.Disposable[] {
                 await vscode.window.showTextDocument(prevEditor.document, { preview: false, preserveFocus: false });
             }
 
-            await repo.status();
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Discard failed: {0}', err instanceof Error ? err.message : String(err)),

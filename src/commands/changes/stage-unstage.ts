@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { ChangeLeaf } from '../../git/changes-provider';
 import { DiffPanel } from '../../ui/DiffPanel';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Enregistre les quatre commandes de staging/unstaging :
@@ -27,8 +28,8 @@ export function registerStageUnstage(gitApi: API): vscode.Disposable[] {
         try {
             const relPath = path.relative(repo.rootUri.fsPath, node.change.uri.fsPath).replace(/\\/g, '/');
             DiffPanel.closeForFile(relPath);
-            await repo.add([node.change.uri.fsPath]);
-            await repo.status();
+            await withGitProgress(() => repo.add([node.change.uri.fsPath]));
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not stage file: {0}', err instanceof Error ? err.message : String(err)),
@@ -45,8 +46,8 @@ export function registerStageUnstage(gitApi: API): vscode.Disposable[] {
         try {
             const relPath = path.relative(repo.rootUri.fsPath, node.change.uri.fsPath).replace(/\\/g, '/');
             DiffPanel.closeForFile(relPath);
-            await repo.revert([node.change.uri.fsPath]);
-            await repo.status();
+            await withGitProgress(() => repo.revert([node.change.uri.fsPath]));
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not unstage file: {0}', err instanceof Error ? err.message : String(err)),
@@ -67,8 +68,8 @@ export function registerStageUnstage(gitApi: API): vscode.Disposable[] {
         }
 
         try {
-            await repo.add(paths);
-            await repo.status();
+            await withGitProgress(() => repo.add(paths));
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not stage all files: {0}', err instanceof Error ? err.message : String(err)),
@@ -88,8 +89,8 @@ export function registerStageUnstage(gitApi: API): vscode.Disposable[] {
         }
 
         try {
-            await repo.revert(changes.map(c => c.uri.fsPath));
-            await repo.status();
+            await withGitProgress(() => repo.revert(changes.map(c => c.uri.fsPath)));
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not unstage all files: {0}', err instanceof Error ? err.message : String(err)),

@@ -4,6 +4,7 @@ import { BranchLeaf } from '../../git/branches-provider';
 import { offerConflictResolution } from '../../git/conflict-helper';
 import { runGit } from '../../git/git-exec';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 async function gitRebase(gitPath: string, onto: string, cwd: string): Promise<string> {
     return (await runGit(gitPath, ['rebase', onto], cwd)).trim();
@@ -56,7 +57,7 @@ export function registerRebase(gitApi: API, context: vscode.ExtensionContext): v
 
         try {
             await gitRebase(gitApi.git.path, targetBranch, repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             vscode.window.showInformationMessage(
                 vscode.l10n.t('Rebase of "{0}" onto "{1}" completed.', currentBranch, targetBranch),
             );
@@ -77,7 +78,7 @@ export function registerRebase(gitApi: API, context: vscode.ExtensionContext): v
             if (action === abortLabel) {
                 try {
                     await gitRebaseAbort(gitApi.git.path, repo.rootUri.fsPath);
-                    await repo.status();
+                    await withGitProgress(() => repo.status());
                     vscode.window.showInformationMessage(
                         vscode.l10n.t('Rebase aborted. The branch is back to its initial state.'),
                     );

@@ -4,6 +4,7 @@ import { ChangeLeaf } from '../../git/changes-provider';
 import { runGit } from '../../git/git-exec';
 import { ConflictPanel } from '../../ui/ConflictPanel';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Exécute `git checkout --ours|--theirs -- <file>` via child_process.
@@ -37,8 +38,8 @@ export function registerResolveConflict(gitApi: API, context: vscode.ExtensionCo
         const fsPath = node.change.uri.fsPath;
         try {
             await gitCheckoutSide(gitApi.git.path, side, fsPath, repo.rootUri.fsPath);
-            await repo.add([fsPath]);
-            await repo.status();
+            await withGitProgress(() => repo.add([fsPath]));
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not resolve conflict: {0}', err instanceof Error ? err.message : String(err)),

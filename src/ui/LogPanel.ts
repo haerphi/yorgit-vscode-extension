@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { resolveWebviewLocale } from '../config';
+import { withGitProgress } from '../git/git-progress';
 import { CommitEntry, LogBranch, LogRef } from '../types/log';
 import { CommitDetailPanel } from './CommitDetailPanel';
 import { ConfirmModal } from './ConfirmModal';
@@ -109,7 +110,7 @@ export class LogPanel {
                         vscode.window.showInformationMessage(
                             vscode.l10n.t('Cherry-pick of {0} applied.', msg.hash.slice(0, 7)),
                         );
-                        await repo.status();
+                        await withGitProgress(() => repo.status());
                     } catch (err) {
                         const errMsg = err instanceof Error ? err.message : String(err);
                         vscode.window.showErrorMessage(vscode.l10n.t('Cherry-pick failed: {0}', errMsg));
@@ -125,7 +126,7 @@ export class LogPanel {
                         vscode.window.showInformationMessage(
                             vscode.l10n.t('Revert of {0} applied.', msg.hash.slice(0, 7)),
                         );
-                        await repo.status();
+                        await withGitProgress(() => repo.status());
                     } catch (err) {
                         const errMsg = err instanceof Error ? err.message : String(err);
                         vscode.window.showErrorMessage(vscode.l10n.t('Revert failed: {0}', errMsg));
@@ -192,7 +193,7 @@ export class LogPanel {
                             ['reset', option.mode, msg.hash],
                             repo.rootUri.fsPath,
                         );
-                        await repo.status();
+                        await withGitProgress(() => repo.status());
                         vscode.window.showInformationMessage(
                             vscode.l10n.t('Reset {0} to {1} done.', option.mode, msg.shortHash),
                         );
@@ -351,7 +352,7 @@ export class LogPanel {
                             ? ['switch', ...(force ? ['-f'] : []), '-c', branchName, msg.hash]
                             : ['branch', branchName, msg.hash];
                         await LogPanel._spawnGit(gitApi.git.path, args, repo.rootUri.fsPath);
-                        await repo.status();
+                        await withGitProgress(() => repo.status());
                         vscode.window.showInformationMessage(
                             doSwitch
                                 ? vscode.l10n.t('Branch {0} created at {1} and checked out.', branchName, msg.shortHash)
@@ -381,7 +382,7 @@ export class LogPanel {
                     }
                     try {
                         await LogPanel._spawnGit(gitApi.git.path, ['checkout', msg.hash], repo.rootUri.fsPath);
-                        await repo.status();
+                        await withGitProgress(() => repo.status());
                         vscode.window.showInformationMessage(
                             vscode.l10n.t('HEAD detached at {0}. Create a branch to keep your commits.', msg.shortHash),
                         );
@@ -395,20 +396,23 @@ export class LogPanel {
     }
 
     private static _spawnGit(gitPath: string, args: string[], cwd: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const proc = spawn(gitPath, args, { cwd });
-            const out: string[] = [];
-            const err: string[] = [];
-            proc.stdout.on('data', (d: Buffer) => out.push(d.toString()));
-            proc.stderr.on('data', (d: Buffer) => err.push(d.toString()));
-            proc.on('close', code => {
-                if (code !== 0) {
-                    reject(new Error(err.join('').trim()));
-                    return;
-                }
-                resolve(out.join(''));
-            });
-        });
+        return withGitProgress(
+            () =>
+                new Promise<string>((resolve, reject) => {
+                    const proc = spawn(gitPath, args, { cwd });
+                    const out: string[] = [];
+                    const err: string[] = [];
+                    proc.stdout.on('data', (d: Buffer) => out.push(d.toString()));
+                    proc.stderr.on('data', (d: Buffer) => err.push(d.toString()));
+                    proc.on('close', code => {
+                        if (code !== 0) {
+                            reject(new Error(err.join('').trim()));
+                            return;
+                        }
+                        resolve(out.join(''));
+                    });
+                }),
+        );
     }
 
     private static async _loadBranches(gitPath: string, cwd: string): Promise<LogBranch[]> {

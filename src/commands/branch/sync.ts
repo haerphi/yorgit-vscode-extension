@@ -2,11 +2,14 @@ import { API, ForcePushMode } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { BranchesProvider } from '../../git/branches-provider';
 import { runGit } from '../../git/git-exec';
+import { withGitProgress } from '../../git/git-progress';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { getRepo } from '../utils';
 
 async function withProgress(title: string, task: () => Promise<void>): Promise<void> {
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `YorGit: ${title}` }, task);
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `YorGit: ${title}` }, () =>
+        withGitProgress(task),
+    );
 }
 
 /**

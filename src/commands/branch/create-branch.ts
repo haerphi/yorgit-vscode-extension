@@ -2,6 +2,7 @@ import { API } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { BranchesProvider } from '../../git/branches-provider';
 import { getRepo, validateBranchName } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Commande "Créer une branche" — accessible via le bouton (+) dans le titre de la vue.
@@ -28,7 +29,7 @@ export function registerCreateBranch(gitApi: API, provider: BranchesProvider): v
 
         try {
             // Le second argument `true` déclenche un checkout automatique sur la nouvelle branche.
-            await repo.createBranch(name, true);
+            await withGitProgress(() => repo.createBranch(name, true));
             provider.refresh();
         } catch (err) {
             vscode.window.showErrorMessage(

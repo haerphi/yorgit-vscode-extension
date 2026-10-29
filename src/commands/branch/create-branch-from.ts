@@ -2,6 +2,7 @@ import { API } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { BranchLeaf, BranchesProvider } from '../../git/branches-provider';
 import { getRepo, validateBranchName } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Commande "Créer une branche depuis celle-ci" — accessible via le clic droit sur un nœud branche.
@@ -30,7 +31,7 @@ export function registerCreateBranchFrom(gitApi: API, provider: BranchesProvider
         try {
             // node.branch.commit ancre la nouvelle branche sur le commit de la branche source,
             // pas sur HEAD — comportement attendu quand on part d'une branche distante.
-            await repo.createBranch(name, true, node.branch.commit);
+            await withGitProgress(() => repo.createBranch(name, true, node.branch.commit));
             provider.refresh();
         } catch (err) {
             vscode.window.showErrorMessage(

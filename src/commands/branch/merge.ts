@@ -4,6 +4,7 @@ import { BranchLeaf } from '../../git/branches-provider';
 import { offerConflictResolution } from '../../git/conflict-helper';
 import { runGit } from '../../git/git-exec';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 export function registerMerge(gitApi: API, context: vscode.ExtensionContext): vscode.Disposable[] {
     const merge = vscode.commands.registerCommand('haerphi-yorgit.merge', async (node: BranchLeaf) => {
@@ -53,7 +54,7 @@ export function registerMerge(gitApi: API, context: vscode.ExtensionContext): vs
 
         try {
             await _spawnGit(gitApi.git.path, ['merge', ...option.args, targetBranch], repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             const needsCommit = option.args.includes('--squash') || option.args.includes('--no-commit');
             vscode.window.showInformationMessage(
                 needsCommit
@@ -76,7 +77,7 @@ export function registerMerge(gitApi: API, context: vscode.ExtensionContext): vs
             if (action === abortLabel) {
                 try {
                     await _spawnGit(gitApi.git.path, ['merge', '--abort'], repo.rootUri.fsPath);
-                    await repo.status();
+                    await withGitProgress(() => repo.status());
                     vscode.window.showInformationMessage(
                         vscode.l10n.t('Merge aborted — branch restored to its initial state.'),
                     );

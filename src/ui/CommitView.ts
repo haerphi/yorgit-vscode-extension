@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveWebviewLocale } from '../config';
 import { getGitOutputChannel, runGit } from '../git/git-exec';
+import { withGitProgress } from '../git/git-progress';
 
 type WebviewMessage =
     | { type: 'ready' }
@@ -163,7 +164,8 @@ export class CommitView implements vscode.WebviewViewProvider {
      * réseau n'est requise, contrairement à push/pull qui restent sur l'API (askpass).
      */
     private async _doCommit(title: string, description: string, amend: boolean): Promise<void> {
-        if (!this._repo || !this._gitPath) {
+        const repo = this._repo;
+        if (!repo || !this._gitPath) {
             return;
         }
         const message = description ? `${title}\n\n${description}` : title;
@@ -172,9 +174,9 @@ export class CommitView implements vscode.WebviewViewProvider {
             args.push('--amend');
         }
         try {
-            await runGit(this._gitPath, args, this._repo.rootUri.fsPath, { logStdout: true });
+            await runGit(this._gitPath, args, repo.rootUri.fsPath, { logStdout: true });
             // Commit fait hors API : forcer la relecture de l'état pour rafraîchir les vues.
-            await this._repo.status();
+            await withGitProgress(() => repo.status());
             this._webviewView?.webview.postMessage({ type: 'committed' });
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);

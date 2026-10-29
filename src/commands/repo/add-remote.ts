@@ -2,6 +2,7 @@ import { API } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Ajoute un remote au dépôt courant, depuis le bouton + du groupe "Distant"
@@ -57,14 +58,14 @@ export function registerAddRemote(gitApi: API, context: vscode.ExtensionContext)
         }
 
         try {
-            await repo.addRemote(name, url);
+            await withGitProgress(() => repo.addRemote(name, url));
             if (result.checkboxes['fetch']) {
                 await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
                         title: vscode.l10n.t('Fetching "{0}"…', name),
                     },
-                    () => repo.fetch(name),
+                    () => withGitProgress(() => repo.fetch(name)),
                 );
             }
             vscode.window.showInformationMessage(vscode.l10n.t('Remote "{0}" added.', name));

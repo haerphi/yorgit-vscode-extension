@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { BranchLeaf } from '../../git/branches-provider';
 import { runGit } from '../../git/git-exec';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Exécute `git switch <args>` via le helper partagé (child_process + gitApi.git.path).
@@ -65,15 +66,15 @@ export function registerSwitch(gitApi: API): vscode.Disposable[] {
         try {
             const localName = localNameFor(node.branch);
             if (localName === undefined) {
-                await repo.checkout(branchName);
+                await withGitProgress(() => repo.checkout(branchName));
             } else if (await localBranchExists(repo, localName)) {
-                await repo.checkout(localName);
+                await withGitProgress(() => repo.checkout(localName));
             } else {
                 await gitSwitch(gitApi.git.path, ['--track', branchName], repo.rootUri.fsPath);
             }
             // repo.status() force la mise à jour de repo.state.HEAD, ce qui déclenche
             // repo.state.onDidChange → BranchesProvider rafraîchit la TreeView.
-            await repo.status();
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Could not switch branch: {0}', err instanceof Error ? err.message : String(err)),
@@ -118,7 +119,7 @@ export function registerSwitch(gitApi: API): vscode.Disposable[] {
             } else {
                 await gitSwitch(gitApi.git.path, ['-f', '--track', branchName], repo.rootUri.fsPath);
             }
-            await repo.status();
+            await withGitProgress(() => repo.status());
         } catch (err) {
             vscode.window.showErrorMessage(
                 vscode.l10n.t('git switch -f failed: {0}', err instanceof Error ? err.message : String(err)),

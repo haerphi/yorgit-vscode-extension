@@ -2,6 +2,7 @@ import { API } from '@haerphi/vscode-git-api-types';
 import * as vscode from 'vscode';
 import { runGit } from '../../git/git-exec';
 import { getRepo } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 export function registerAbortRebase(gitApi: API): vscode.Disposable {
     return vscode.commands.registerCommand('haerphi-yorgit.abort-rebase', async () => {
@@ -22,7 +23,7 @@ export function registerAbortRebase(gitApi: API): vscode.Disposable {
 
         try {
             await _spawnGit(gitApi.git.path, ['rebase', '--abort'], repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             vscode.window.showInformationMessage(
                 vscode.l10n.t('Rebase aborted. The branch is back to its initial state.'),
             );

@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getRebaseDefaultOrder, resolveWebviewLocale } from '../config';
 import { offerConflictResolution } from '../git/conflict-helper';
+import { withGitProgress } from '../git/git-progress';
 import { RebaseEntry } from '../types/rebase';
 
 export class RebasePanel {
@@ -70,7 +71,7 @@ export class RebasePanel {
                 panel.webview.postMessage({ type: 'running' });
                 try {
                     await RebasePanel._executeRebase(gitApi.git.path, repo.rootUri.fsPath, msg.entries, upstream);
-                    await repo.status();
+                    await withGitProgress(() => repo.status());
                     panel.webview.postMessage({ type: 'done' });
                     vscode.window.showInformationMessage(
                         vscode.l10n.t('Interactive rebase onto "{0}" completed.', upstreamLabel),
@@ -97,7 +98,7 @@ export class RebasePanel {
                     if (action === abortLabel) {
                         try {
                             await RebasePanel._spawnGit(gitApi.git.path, ['rebase', '--abort'], repo.rootUri.fsPath);
-                            await repo.status();
+                            await withGitProgress(() => repo.status());
                             vscode.window.showInformationMessage(
                                 vscode.l10n.t('Rebase aborted. The branch is back to its initial state.'),
                             );
@@ -251,23 +252,26 @@ export class RebasePanel {
         cwd: string,
         extraEnv: Record<string, string> = {},
     ): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const proc = spawn(gitPath, args, {
-                cwd,
-                env: { ...process.env, ...extraEnv },
-            });
-            const out: string[] = [];
-            const err: string[] = [];
-            proc.stdout.on('data', (d: Buffer) => out.push(d.toString()));
-            proc.stderr.on('data', (d: Buffer) => err.push(d.toString()));
-            proc.on('close', code => {
-                if (code !== 0) {
-                    reject(new Error((err.join('') || out.join('')).trim()));
-                    return;
-                }
-                resolve(out.join(''));
-            });
-        });
+        return withGitProgress(
+            () =>
+                new Promise<string>((resolve, reject) => {
+                    const proc = spawn(gitPath, args, {
+                        cwd,
+                        env: { ...process.env, ...extraEnv },
+                    });
+                    const out: string[] = [];
+                    const err: string[] = [];
+                    proc.stdout.on('data', (d: Buffer) => out.push(d.toString()));
+                    proc.stderr.on('data', (d: Buffer) => err.push(d.toString()));
+                    proc.on('close', code => {
+                        if (code !== 0) {
+                            reject(new Error((err.join('') || out.join('')).trim()));
+                            return;
+                        }
+                        resolve(out.join(''));
+                    });
+                }),
+        );
     }
 
     private static _buildHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {

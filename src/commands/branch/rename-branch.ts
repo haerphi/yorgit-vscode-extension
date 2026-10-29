@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { BranchesProvider, BranchLeaf } from '../../git/branches-provider';
 import { runGit } from '../../git/git-exec';
 import { getRepo, validateBranchName } from '../utils';
+import { withGitProgress } from '../../git/git-progress';
 
 /**
  * Exécute `git branch -m <old> <new>` via child_process.
@@ -49,7 +50,7 @@ export function registerRenameBranch(gitApi: API, provider: BranchesProvider): v
 
         try {
             await gitRenameBranch(gitApi.git.path, oldName, newName, repo.rootUri.fsPath);
-            await repo.status();
+            await withGitProgress(() => repo.status());
             provider.refresh();
         } catch (err) {
             vscode.window.showErrorMessage(

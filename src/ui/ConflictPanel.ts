@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { resolveWebviewLocale } from '../config';
 import { runGit } from '../git/git-exec';
 import { ConflictFile, ConflictHunk, FileSection } from '../types/conflict';
+import { withGitProgress } from '../git/git-progress';
 
 export class ConflictPanel {
     private static _panel: vscode.WebviewPanel | undefined;
@@ -67,8 +68,8 @@ export class ConflictPanel {
                 try {
                     fs.writeFileSync(currentFsPath, msg.content, 'utf8');
                     // git add pour marquer le conflit comme résolu
-                    await repo.add([currentFsPath]);
-                    await repo.status();
+                    await withGitProgress(() => repo.add([currentFsPath]));
+                    await withGitProgress(() => repo.status());
                     vscode.window.showInformationMessage(vscode.l10n.t('{0} saved and staged.', currentFileName));
 
                     // mergeChanges est la source de vérité pour l'état de conflit (voir
