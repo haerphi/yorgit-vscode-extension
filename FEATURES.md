@@ -64,6 +64,7 @@
 - [x] Inspection d'un commit (diff détaillé) dans un onglet dédié par commit examiné
 - [x] Scroll horizontal du diff dans l'inspection d'un commit (lignes longues visibles en entier, plus de troncature)
 - [x] Filtres : par auteur, message, SHA, date
+- [x] Filtre par branches dans l'historique : sélection multiple des branches locales/distantes à afficher (recherche, « Toutes », « Courante uniquement »), graphe recalculé via `git log <refs>`, sélection mémorisée par workspace
 - [x] Copier le hash d'un commit dans le presse-papiers (menu contextuel de l'historique)
 - [x] Survol d'une date relative ("11 days ago") → tooltip avec la date et l'heure exactes du commit (historique et rebase interactif)
 
@@ -82,6 +83,7 @@
 - [x] Badge de scope Conventional Commits sur chaque ligne du rebase interactif (`feat(frontend)` → badge « frontend » de couleur stable, le message n'affiche plus que la description ; badge gris pour les commits sans scope, aucun badge pour les messages non conventionnels)
 - [x] Bouton « Grouper par scope » dans le rebase interactif — rassemble les commits d'un même scope (frontend, backend, infra…), ordre chronologique conservé dans chaque groupe, commits sans scope en fin de liste ; désactivé quand le regroupement ne changerait rien
 - [x] Volet "Aperçu" rétractable montrant le résultat final du rebase (squash/fixup fondus, drop exclus, reword avec le nouveau message) avant de cliquer sur "Lancer le rebase"
+- [x] Créer une branche sur un commit (menu contextuel de l'historique) : nom, option « basculer dessus » et, si cochée, option « forcer » (`git switch -f -c`)
 - [x] Ajouter un tag sur un commit (depuis l'historique, avec push optionnel)
 - [x] Supprimer un tag (depuis l'historique, avec suppression distante optionnelle)
 - [ ] Reflog (via `git reflog`, commande directe)

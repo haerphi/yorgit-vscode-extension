@@ -222,5 +222,13 @@
     "{0}, uncommitted changes": "{0}, modifications non commitées",
     "Show commit": "Afficher le commit",
     "Copy hash": "Copier le hash",
-    "This line is not committed yet.": "Cette ligne n'est pas encore commitée."
+    "This line is not committed yet.": "Cette ligne n'est pas encore commitée.",
+    "Create Branch": "Créer la branche",
+    "Create a branch at commit {0}?": "Créer une branche sur le commit {0} ?",
+    "Branch name": "Nom de la branche",
+    "Switch to the new branch": "Basculer sur la nouvelle branche",
+    "Force (discard uncommitted local changes)": "Forcer (écraser les modifications locales non commitées)",
+    "Branch {0} created at {1} and checked out.": "Branche {0} créée sur {1} et activée.",
+    "Branch {0} created at {1}.": "Branche {0} créée sur {1}.",
+    "Could not load history: {0}": "Impossible de charger l'historique : {0}"
 }

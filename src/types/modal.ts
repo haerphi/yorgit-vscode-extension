@@ -15,6 +15,8 @@ export interface ModalCheckbox {
     id: string;
     label: string;
     checked?: boolean;
+    /** Id d'une autre checkbox : celle-ci reste désactivée (et renvoyée à false) tant que l'autre n'est pas cochée. */
+    enabledWhen?: string;
 }
 
 export interface ModalInput {

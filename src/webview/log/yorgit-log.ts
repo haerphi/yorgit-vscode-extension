@@ -1,6 +1,6 @@
 import { LitElement, PropertyValues, css, html, svg } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
-import { CommitEntry, LogRef } from '../../types/log';
+import { CommitEntry, LogBranch, LogRef } from '../../types/log';
 
 declare global {
     interface Window {
@@ -25,12 +25,22 @@ const L = pick(
         colHash: 'Hash',
         ctxCopyHash: 'Copy commit hash',
         ctxSwitch: 'Switch to this commit',
+        ctxCreateBranch: 'Create a branch here…',
         ctxCherryPick: 'Cherry-pick this commit',
         ctxRevert: 'Revert this commit',
         ctxRebase: 'Interactive rebase from here',
         ctxAddTag: 'Add tag…',
         ctxDeleteTag: (tag: string) => `Delete tag "${tag}"…`,
         ctxReset: 'Reset here…',
+        branchesAll: 'All branches',
+        branchesCount: (n: number) => `${n} branches`,
+        branchesTitle: 'Choose the branches shown in the history',
+        branchesSearch: 'Search a branch…',
+        branchesShowAll: 'All',
+        branchesCurrentOnly: 'Current only',
+        branchesLocal: 'Local',
+        branchesRemote: 'Remote',
+        branchesNone: 'No matching branch',
     },
     {
         loadingHistory: "Chargement de l'historique…",
@@ -43,12 +53,22 @@ const L = pick(
         colHash: 'Hash',
         ctxCopyHash: 'Copier le hash du commit',
         ctxSwitch: 'Basculer sur ce commit',
+        ctxCreateBranch: 'Créer une branche ici…',
         ctxCherryPick: 'Cherry-pick ce commit',
         ctxRevert: 'Revert ce commit',
         ctxRebase: 'Rebase interactif depuis ici',
         ctxAddTag: 'Ajouter un tag…',
         ctxDeleteTag: (tag: string) => `Supprimer le tag « ${tag} »…`,
         ctxReset: 'Reset ici…',
+        branchesAll: 'Toutes les branches',
+        branchesCount: (n: number) => `${n} branches`,
+        branchesTitle: "Choisir les branches affichées dans l'historique",
+        branchesSearch: 'Rechercher une branche…',
+        branchesShowAll: 'Toutes',
+        branchesCurrentOnly: 'Courante uniquement',
+        branchesLocal: 'Locales',
+        branchesRemote: 'Distantes',
+        branchesNone: 'Aucune branche correspondante',
     },
 );
 
@@ -173,6 +193,7 @@ function computeGraph(commits: CommitEntry[]): GraphRow[] {
 // ── Lit component ─────────────────────────────────────────────────────────────
 type ProviderMessage =
     | { type: 'commits'; commits: CommitEntry[] }
+    | { type: 'branches'; branches: LogBranch[]; selected: string[] }
     | { type: 'error'; message: string }
     | { type: 'cherry-pick-error'; message: string };
 
@@ -193,6 +214,10 @@ export class YorgitLog extends LitElement {
         error: { type: String },
         _filterText: { state: true },
         _ctxMenu: { state: true },
+        _branches: { state: true },
+        _selectedRefs: { state: true },
+        _branchMenuOpen: { state: true },
+        _branchSearch: { state: true },
     };
 
     declare commits: CommitEntry[];
@@ -201,6 +226,11 @@ export class YorgitLog extends LitElement {
     declare error: string;
     declare _filterText: string;
     declare _ctxMenu: CtxMenu | null;
+    declare _branches: LogBranch[];
+    /** Refs complètes sélectionnées ; vide = toutes les branches. */
+    declare _selectedRefs: string[];
+    declare _branchMenuOpen: boolean;
+    declare _branchSearch: string;
 
     private _graphRows: GraphRow[] = [];
     private _graphWidth = LANE_W;
@@ -213,6 +243,10 @@ export class YorgitLog extends LitElement {
         this.error = '';
         this._filterText = '';
         this._ctxMenu = null;
+        this._branches = [];
+        this._selectedRefs = [];
+        this._branchMenuOpen = false;
+        this._branchSearch = '';
     }
 
     willUpdate(changed: PropertyValues<this>) {
@@ -229,6 +263,9 @@ export class YorgitLog extends LitElement {
             if (msg.type === 'commits') {
                 this.commits = msg.commits;
                 this.loading = false;
+            } else if (msg.type === 'branches') {
+                this._branches = msg.branches;
+                this._selectedRefs = msg.selected;
             } else if (msg.type === 'error') {
                 this.error = msg.message;
                 this.loading = false;
@@ -240,13 +277,136 @@ export class YorgitLog extends LitElement {
             if (this._ctxMenu) {
                 this._ctxMenu = null;
             }
+            if (this._branchMenuOpen) {
+                this._branchMenuOpen = false;
+            }
         });
         document.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Escape' && this._ctxMenu) {
                 this._ctxMenu = null;
             }
+            if (e.key === 'Escape' && this._branchMenuOpen) {
+                this._branchMenuOpen = false;
+            }
         });
         vscode.postMessage({ type: 'ready' });
+    }
+
+    private _setBranchFilter(refs: string[]) {
+        // Tout cocher équivaut à « toutes » : on repasse en --all pour inclure aussi les tags isolés.
+        const normalized = refs.length === this._branches.length ? [] : refs;
+        this._selectedRefs = normalized;
+        vscode.postMessage({ type: 'set-branch-filter', branches: normalized });
+    }
+
+    private _toggleBranch(refname: string) {
+        const current = this._selectedRefs.length > 0 ? this._selectedRefs : this._branches.map(b => b.refname);
+        const next = current.includes(refname) ? current.filter(r => r !== refname) : [...current, refname];
+        if (next.length === 0) {
+            return;
+        }
+        this._setBranchFilter(next);
+    }
+
+    private _isBranchSelected(refname: string): boolean {
+        return this._selectedRefs.length === 0 || this._selectedRefs.includes(refname);
+    }
+
+    private _branchFilterLabel(): string {
+        if (this._selectedRefs.length === 0) {
+            return L.branchesAll;
+        }
+        if (this._selectedRefs.length <= 2) {
+            return this._branches
+                .filter(b => this._selectedRefs.includes(b.refname))
+                .map(b => b.name)
+                .join(', ');
+        }
+        return L.branchesCount(this._selectedRefs.length);
+    }
+
+    private renderBranchGroup(title: string, branches: LogBranch[]) {
+        if (branches.length === 0) {
+            return '';
+        }
+        return html`
+            <div class="branch-group-title">${title}</div>
+            ${branches.map(
+                b => html`
+                    <label class="branch-item" title=${b.name}>
+                        <input
+                            type="checkbox"
+                            .checked=${this._isBranchSelected(b.refname)}
+                            @change=${() => this._toggleBranch(b.refname)}
+                        />
+                        <span class="branch-name">${b.isCurrent ? '✓ ' : ''}${b.name}</span>
+                    </label>
+                `,
+            )}
+        `;
+    }
+
+    private renderBranchFilter() {
+        const q = this._branchSearch.trim().toLowerCase();
+        const visible = q ? this._branches.filter(b => b.name.toLowerCase().includes(q)) : this._branches;
+        const current = this._branches.find(b => b.isCurrent);
+        return html`
+            <div class="branch-filter" @click=${(e: MouseEvent) => e.stopPropagation()}>
+                <button
+                    class="branch-filter-btn ${this._selectedRefs.length > 0 ? 'active' : ''}"
+                    title=${L.branchesTitle}
+                    @click=${() => {
+                        this._branchMenuOpen = !this._branchMenuOpen;
+                        this._ctxMenu = null;
+                    }}
+                >
+                    <span>⎇</span>
+                    <span class="branch-filter-label">${this._branchFilterLabel()}</span>
+                    <span>▾</span>
+                </button>
+                ${this._branchMenuOpen
+                    ? html`
+                          <div class="branch-menu">
+                              <input
+                                  class="filter-input branch-search"
+                                  type="text"
+                                  placeholder=${L.branchesSearch}
+                                  .value=${this._branchSearch}
+                                  @input=${(e: InputEvent) => {
+                                      this._branchSearch = (e.target as HTMLInputElement).value;
+                                  }}
+                              />
+                              <div class="branch-actions">
+                                  <span class="branch-action" @click=${() => this._setBranchFilter([])}
+                                      >${L.branchesShowAll}</span
+                                  >
+                                  ${current
+                                      ? html`<span
+                                            class="branch-action"
+                                            @click=${() => this._setBranchFilter([current.refname])}
+                                            >${L.branchesCurrentOnly}</span
+                                        >`
+                                      : ''}
+                              </div>
+                              <div class="branch-list">
+                                  ${visible.length === 0
+                                      ? html`<div class="branch-empty">${L.branchesNone}</div>`
+                                      : html`
+                                            ${this.renderBranchGroup(
+                                                L.branchesLocal,
+                                                visible.filter(b => b.type === 'local'),
+                                            )}
+                                            ${this.renderBranchGroup(
+                                                L.branchesRemote,
+                                                visible.filter(b => b.type === 'remote'),
+                                            )}
+                                        `}
+                              </div>
+                          </div>
+                      `
+                    : ''}
+            </div>
+        `;
     }
 
     private _selectCommit(hash: string) {
@@ -337,6 +497,125 @@ export class YorgitLog extends LitElement {
 
         .filter-clear:hover {
             background: var(--vscode-list-hoverBackground);
+        }
+
+        /* ── Branch filter ── */
+        .branch-filter {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .branch-filter-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 220px;
+            background: var(--vscode-dropdown-background, var(--vscode-input-background));
+            border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, transparent));
+            color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+            padding: 2px 6px;
+            font-size: 11px;
+            font-family: var(--vscode-font-family);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .branch-filter-btn:focus {
+            outline: none;
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .branch-filter-btn.active {
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .branch-filter-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .branch-menu {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            z-index: 1000;
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 6px;
+            background: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            font-size: 12px;
+            color: var(--vscode-menu-foreground);
+        }
+
+        .branch-search {
+            flex: none;
+        }
+
+        .branch-actions {
+            display: flex;
+            gap: 10px;
+            padding: 2px 2px 4px;
+            border-bottom: 1px solid var(--vscode-menu-separatorBackground, var(--vscode-panel-border));
+        }
+
+        .branch-action {
+            cursor: pointer;
+            color: var(--vscode-textLink-foreground);
+            font-size: 11px;
+            user-select: none;
+        }
+
+        .branch-action:hover {
+            text-decoration: underline;
+        }
+
+        .branch-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .branch-group-title {
+            padding: 4px 2px 2px;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .branch-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px;
+            border-radius: 2px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .branch-item:hover {
+            background: var(--vscode-menu-selectionBackground);
+            color: var(--vscode-menu-selectionForeground);
+        }
+
+        .branch-item input {
+            margin: 0;
+        }
+
+        .branch-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .branch-empty {
+            padding: 6px 2px;
+            font-style: italic;
+            color: var(--vscode-descriptionForeground);
         }
 
         .filter-count {
@@ -706,6 +985,19 @@ export class YorgitLog extends LitElement {
         this._ctxMenu = null;
     }
 
+    private _createBranchHere(e: MouseEvent) {
+        e.stopPropagation();
+        if (!this._ctxMenu) {
+            return;
+        }
+        vscode.postMessage({
+            type: 'create-branch-here',
+            hash: this._ctxMenu.hash,
+            shortHash: this._ctxMenu.shortHash,
+        });
+        this._ctxMenu = null;
+    }
+
     private _resetToCommit(e: MouseEvent) {
         e.stopPropagation();
         if (!this._ctxMenu) {
@@ -755,6 +1047,9 @@ export class YorgitLog extends LitElement {
                 </div>
                 <div class="ctx-menu-item" @click=${(e: MouseEvent) => this._switchToCommit(e)}>
                     <span>⎇</span> ${L.ctxSwitch}
+                </div>
+                <div class="ctx-menu-item" @click=${(e: MouseEvent) => this._createBranchHere(e)}>
+                    <span>⑂</span> ${L.ctxCreateBranch}
                 </div>
                 <div class="ctx-menu-item" @click=${(e: MouseEvent) => this._cherryPick(e)}>
                     <span>🍒</span> ${L.ctxCherryPick}
@@ -882,6 +1177,7 @@ export class YorgitLog extends LitElement {
                                   >
                               `
                             : ''}
+                        ${this.renderBranchFilter()}
                     </div>
                     <div class="commit-list">
                         ${filteredCommits

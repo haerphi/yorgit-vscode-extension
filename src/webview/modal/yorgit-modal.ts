@@ -20,6 +20,7 @@ class YorgitModal extends LitElement {
     static properties = {
         options: { type: Object },
         selectValues: { state: true },
+        checkedValues: { state: true },
     };
 
     options: ModalOptions | null = null;
@@ -27,6 +28,9 @@ class YorgitModal extends LitElement {
     // Valeur courante de chaque liste déroulante — état réactif pour que le bandeau
     // warning de l'option sélectionnée apparaisse/disparaisse au changement.
     selectValues: Record<string, string> = {};
+
+    // État réactif des checkboxes, nécessaire pour activer/désactiver celles qui dépendent d'une autre.
+    checkedValues: Record<string, boolean> = {};
 
     static styles = css`
         :host {
@@ -193,6 +197,15 @@ class YorgitModal extends LitElement {
             font-size: 0.95em;
         }
 
+        .checkbox.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .checkbox.disabled input[type='checkbox'] {
+            cursor: not-allowed;
+        }
+
         .checkbox input[type='checkbox'] {
             width: 14px;
             height: 14px;
@@ -253,7 +266,21 @@ class YorgitModal extends LitElement {
                 values[select.id] = select.value ?? select.options[0]?.value ?? '';
             }
             this.selectValues = values;
+            const checked: Record<string, boolean> = {};
+            for (const cb of this.options.checkboxes ?? []) {
+                checked[cb.id] = cb.checked ?? false;
+            }
+            this.checkedValues = checked;
         }
+    }
+
+    private isCheckboxDisabled(cb: { enabledWhen?: string }): boolean {
+        return cb.enabledWhen !== undefined && !this.checkedValues[cb.enabledWhen];
+    }
+
+    private handleCheckboxChange(e: Event) {
+        const cb = e.target as HTMLInputElement;
+        this.checkedValues = { ...this.checkedValues, [cb.id]: cb.checked };
     }
 
     /** Warnings des options actuellement sélectionnées dans les listes déroulantes. */
@@ -350,8 +377,14 @@ class YorgitModal extends LitElement {
                               <div class="checkboxes">
                                   ${o.checkboxes.map(
                                       cb => html`
-                                          <label class="checkbox">
-                                              <input type="checkbox" id=${cb.id} ?checked=${cb.checked ?? false} />
+                                          <label class="checkbox ${this.isCheckboxDisabled(cb) ? 'disabled' : ''}">
+                                              <input
+                                                  type="checkbox"
+                                                  id=${cb.id}
+                                                  .checked=${this.checkedValues[cb.id] ?? false}
+                                                  ?disabled=${this.isCheckboxDisabled(cb)}
+                                                  @change=${this.handleCheckboxChange}
+                                              />
                                               <span>${cb.label}</span>
                                           </label>
                                       `,
@@ -406,7 +439,7 @@ class YorgitModal extends LitElement {
         // On collecte l'état de toutes les checkboxes et champs texte au moment du clic.
         const checkboxes: Record<string, boolean> = {};
         this.renderRoot.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(cb => {
-            checkboxes[cb.id] = cb.checked;
+            checkboxes[cb.id] = cb.checked && !cb.disabled;
         });
         const inputs: Record<string, string> = {};
         this.renderRoot.querySelectorAll<HTMLInputElement>('input[type="text"]').forEach(input => {

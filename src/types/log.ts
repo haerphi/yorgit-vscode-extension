@@ -22,3 +22,12 @@ export interface CommitEntry {
     message: string;
     refs: LogRef[];
 }
+
+export interface LogBranch {
+    /** Nom affiché, ex: "main", "origin/main" */
+    name: string;
+    /** Ref complète passée à `git log`, ex: "refs/heads/main" — évite toute ambiguïté avec un tag ou un fichier */
+    refname: string;
+    type: 'local' | 'remote';
+    isCurrent: boolean;
+}

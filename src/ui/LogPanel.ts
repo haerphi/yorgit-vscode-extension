@@ -3,12 +3,14 @@ import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { resolveWebviewLocale } from '../config';
-import { CommitEntry, LogRef } from '../types/log';
+import { CommitEntry, LogBranch, LogRef } from '../types/log';
 import { CommitDetailPanel } from './CommitDetailPanel';
 import { ConfirmModal } from './ConfirmModal';
 import { RebasePanel } from './RebasePanel';
+import { validateBranchName } from '../commands/utils';
 
 const MAX_COMMITS = 500;
+const BRANCH_FILTER_KEY = 'yorgit.log.branchFilter';
 
 export class LogPanel {
     private static _panel: vscode.WebviewPanel | undefined;
@@ -33,10 +35,27 @@ export class LogPanel {
 
         LogPanel._panel = panel;
 
+        // Refs complètes (refs/heads/…, refs/remotes/…) ; vide = toutes les branches.
+        let branchFilter = context.workspaceState.get<string[]>(BRANCH_FILTER_KEY, []);
+
+        const loadAndPost = async () => {
+            const branches = await LogPanel._loadBranches(gitApi.git.path, repo.rootUri.fsPath);
+            // Une branche supprimée ou renommée depuis la dernière session ne doit pas
+            // faire échouer `git log` — on l'oublie silencieusement.
+            const known = new Set(branches.map(b => b.refname));
+            const validFilter = branchFilter.filter(r => known.has(r));
+            if (validFilter.length !== branchFilter.length) {
+                branchFilter = validFilter;
+                await context.workspaceState.update(BRANCH_FILTER_KEY, branchFilter);
+            }
+            const commits = await LogPanel._loadCommits(gitApi.git.path, repo.rootUri.fsPath, branchFilter);
+            panel.webview.postMessage({ type: 'branches', branches, selected: branchFilter });
+            panel.webview.postMessage({ type: 'commits', commits });
+        };
+
         const reloadCommits = async () => {
             try {
-                const commits = await LogPanel._loadCommits(gitApi.git.path, repo.rootUri.fsPath);
-                panel.webview.postMessage({ type: 'commits', commits });
+                await loadAndPost();
             } catch {
                 // Silently ignore reload errors — user still sees last known state
             }
@@ -57,16 +76,25 @@ export class LogPanel {
                 parentHashes?: string[];
                 shortHash?: string;
                 tagName?: string;
+                branches?: string[];
             }) => {
                 if (msg.type === 'ready') {
                     try {
-                        const commits = await LogPanel._loadCommits(gitApi.git.path, repo.rootUri.fsPath);
-                        panel.webview.postMessage({ type: 'commits', commits });
+                        await loadAndPost();
                     } catch (err) {
                         panel.webview.postMessage({
                             type: 'error',
                             message: err instanceof Error ? err.message : String(err),
                         });
+                    }
+                } else if (msg.type === 'set-branch-filter' && msg.branches) {
+                    branchFilter = msg.branches;
+                    await context.workspaceState.update(BRANCH_FILTER_KEY, branchFilter);
+                    try {
+                        await loadAndPost();
+                    } catch (err) {
+                        const errMsg = err instanceof Error ? err.message : String(err);
+                        vscode.window.showErrorMessage(vscode.l10n.t('Could not load history: {0}', errMsg));
                     }
                 } else if (msg.type === 'open-commit' && msg.hash && msg.shortHash) {
                     await CommitDetailPanel.show(context, gitApi, msg.hash, msg.shortHash, msg.parentHashes ?? []);
@@ -282,6 +310,60 @@ export class LogPanel {
                     // La suppression d'un tag hors API vscode.git ne déclenche pas
                     // repo.state.onDidChange — recharger l'historique manuellement.
                     await reloadCommits();
+                } else if (msg.type === 'create-branch-here' && msg.hash && msg.shortHash) {
+                    const result = await ConfirmModal.show(context, {
+                        title: vscode.l10n.t('Create Branch'),
+                        message: vscode.l10n.t('Create a branch at commit {0}?', msg.shortHash),
+                        inputs: [
+                            {
+                                id: 'name',
+                                label: vscode.l10n.t('Branch name'),
+                                placeholder: vscode.l10n.t('e.g. feature/my-feature'),
+                            },
+                        ],
+                        checkboxes: [
+                            { id: 'switch', label: vscode.l10n.t('Switch to the new branch'), checked: false },
+                            {
+                                id: 'force',
+                                label: vscode.l10n.t('Force (discard uncommitted local changes)'),
+                                checked: false,
+                                enabledWhen: 'switch',
+                            },
+                        ],
+                        buttons: [
+                            { label: vscode.l10n.t('Cancel'), value: 'cancel', variant: 'secondary' },
+                            { label: vscode.l10n.t('Create Branch'), value: 'confirm', variant: 'primary' },
+                        ],
+                    });
+                    if (!result || result.button !== 'confirm') {
+                        return;
+                    }
+                    const branchName = result.inputs['name']?.trim() ?? '';
+                    const nameError = validateBranchName(branchName);
+                    if (nameError) {
+                        vscode.window.showErrorMessage(nameError);
+                        return;
+                    }
+                    const doSwitch = result.checkboxes['switch'] === true;
+                    const force = doSwitch && result.checkboxes['force'] === true;
+                    try {
+                        const args = doSwitch
+                            ? ['switch', ...(force ? ['-f'] : []), '-c', branchName, msg.hash]
+                            : ['branch', branchName, msg.hash];
+                        await LogPanel._spawnGit(gitApi.git.path, args, repo.rootUri.fsPath);
+                        await repo.status();
+                        vscode.window.showInformationMessage(
+                            doSwitch
+                                ? vscode.l10n.t('Branch {0} created at {1} and checked out.', branchName, msg.shortHash)
+                                : vscode.l10n.t('Branch {0} created at {1}.', branchName, msg.shortHash),
+                        );
+                        // Une branche créée hors API vscode.git peut ne pas déclencher
+                        // repo.state.onDidChange — recharger l'historique manuellement.
+                        await reloadCommits();
+                    } catch (err) {
+                        const errMsg = err instanceof Error ? err.message : String(err);
+                        vscode.window.showErrorMessage(vscode.l10n.t('Could not create branch: {0}', errMsg));
+                    }
                 } else if (msg.type === 'switch-to-commit' && msg.hash && msg.shortHash) {
                     const switchLabel = vscode.l10n.t('Switch Anyway');
                     const confirm = await vscode.window.showWarningMessage(
@@ -329,17 +411,41 @@ export class LogPanel {
         });
     }
 
-    private static _loadCommits(gitPath: string, cwd: string): Promise<CommitEntry[]> {
+    private static async _loadBranches(gitPath: string, cwd: string): Promise<LogBranch[]> {
+        const out = await LogPanel._spawnGit(
+            gitPath,
+            ['for-each-ref', '--format=%(refname)%00%(refname:short)%00%(HEAD)', 'refs/heads', 'refs/remotes'],
+            cwd,
+        );
+        return (
+            out
+                .split('\n')
+                .filter(l => l.includes('\x00'))
+                .map(line => {
+                    const [refname, name, head] = line.split('\x00');
+                    return {
+                        name,
+                        refname,
+                        type: refname.startsWith('refs/heads/') ? ('local' as const) : ('remote' as const),
+                        isCurrent: head === '*',
+                    };
+                })
+                // refs/remotes/<remote>/HEAD n'est qu'un alias symbolique de la branche par défaut
+                .filter(b => !(b.type === 'remote' && b.refname.endsWith('/HEAD')))
+        );
+    }
+
+    private static _loadCommits(gitPath: string, cwd: string, refs: string[]): Promise<CommitEntry[]> {
         return new Promise((resolve, reject) => {
             const proc = spawn(
                 gitPath,
-                // --exclude doit précéder --all pour que git l'applique avant l'expansion de toutes les refs
                 [
                     'log',
-                    '--exclude=refs/stash',
-                    '--all',
+                    // --exclude doit précéder --all pour que git l'applique avant l'expansion de toutes les refs
+                    ...(refs.length > 0 ? refs : ['--exclude=refs/stash', '--all']),
                     `--max-count=${MAX_COMMITS}`,
                     '--format=%H%x00%P%x00%an%x00%ar%x00%s%x00%D%x00%ai',
+                    '--',
                 ],
                 { cwd },
             );
