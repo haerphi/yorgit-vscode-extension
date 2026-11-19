@@ -273,6 +273,26 @@ export class YorgitLog extends LitElement {
                 this._ctxMenu = null;
             }
         });
+        // mousedown en capture : certains éléments (filtre de branches…) stoppent la propagation du click.
+        document.addEventListener(
+            'mousedown',
+            (e: MouseEvent) => {
+                if (!this._ctxMenu) {
+                    return;
+                }
+                const menu = this.renderRoot.querySelector('.ctx-menu');
+                if (menu && e.composedPath().includes(menu)) {
+                    return;
+                }
+                this._ctxMenu = null;
+            },
+            true,
+        );
+        // Un clic hors de la webview (reste de VS Code) n'émet aucun événement souris ici, seulement un blur.
+        window.addEventListener('blur', () => {
+            this._ctxMenu = null;
+            this._branchMenuOpen = false;
+        });
         document.addEventListener('click', () => {
             if (this._ctxMenu) {
                 this._ctxMenu = null;

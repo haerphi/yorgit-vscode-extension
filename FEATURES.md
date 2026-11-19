@@ -66,6 +66,7 @@
 - [x] Filtres : par auteur, message, SHA, date
 - [x] Filtre par branches dans l'historique : sélection multiple des branches locales/distantes à afficher (recherche, « Toutes », « Courante uniquement »), graphe recalculé via `git log <refs>`, sélection mémorisée par workspace
 - [x] Copier le hash d'un commit dans le presse-papiers (menu contextuel de l'historique)
+- [x] Fermeture du menu contextuel de l'historique au clic en dehors (dans la vue ou ailleurs dans VS Code) ou avec Échap
 - [x] Survol d'une date relative ("11 days ago") → tooltip avec la date et l'heure exactes du commit (historique et rebase interactif)
 
 ---
