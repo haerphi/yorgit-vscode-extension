@@ -1,4 +1,7 @@
 {
+    "\"{0}\" copied.": "« {0} » copié.",
+    "File \"{0}\" no longer exists.": "Le fichier « {0} » n'existe plus.",
+    "Failed to open file: {0}": "Impossible d'ouvrir le fichier : {0}",
     "New branch name": "Nom de la nouvelle branche",
     "e.g. feature/my-feature": "ex : feature/ma-fonctionnalite",
     "Could not create branch: {0}": "Impossible de créer la branche : {0}",

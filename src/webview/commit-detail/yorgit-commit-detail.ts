@@ -1,4 +1,4 @@
-import { LitElement, css, html, svg } from 'lit';
+import { LitElement, css, html, nothing, svg } from 'lit';
 import { pick } from '../shared/i18n';
 
 /**
@@ -17,15 +17,26 @@ interface CommitPayload {
 declare global {
     interface Window {
         __YORGIT_COMMIT__?: CommitPayload;
+        acquireVsCodeApi: () => { postMessage: (msg: unknown) => void };
     }
 }
+
+const vscode = window.acquireVsCodeApi();
 
 const L = pick(
     {
         noChanges: 'This commit introduces no file change.',
+        openFile: 'Open file',
+        copyName: 'Copy file name',
+        copyRelative: 'Copy relative path',
+        copyAbsolute: 'Copy full path',
     },
     {
         noChanges: "Ce commit n'introduit aucune modification de fichier.",
+        openFile: 'Ouvrir le fichier',
+        copyName: 'Copier le nom du fichier',
+        copyRelative: 'Copier le chemin relatif',
+        copyAbsolute: 'Copier le chemin complet',
     },
 );
 
@@ -39,6 +50,7 @@ interface DiffLine {
 
 interface FileDiff {
     path: string;
+    deleted: boolean;
     added: number;
     removed: number;
     lines: DiffLine[];
@@ -54,7 +66,7 @@ function parseDiff(raw: string): FileDiff[] {
                 files.push(cur);
             }
             const m = line.match(/diff --git a\/(.*) b\/(.*)/);
-            cur = { path: m?.[2] ?? line, added: 0, removed: 0, lines: [] };
+            cur = { path: m?.[2] ?? line, deleted: false, added: 0, removed: 0, lines: [] };
         } else if (cur) {
             if (line.startsWith('@@')) {
                 cur.lines.push({ kind: 'hunk', content: line });
@@ -73,6 +85,9 @@ function parseDiff(raw: string): FileDiff[] {
                 line.startsWith('Binary')
             ) {
                 cur.lines.push({ kind: 'meta', content: line });
+                if (line.startsWith('deleted file')) {
+                    cur.deleted = true;
+                }
             }
         }
     }
@@ -194,11 +209,13 @@ export class YorgitCommitDetail extends LitElement {
         _collapsedFiles: { state: true },
         _collapsedDirs: { state: true },
         _selectedFile: { state: true },
+        _ctxMenu: { state: true },
     };
 
     declare _collapsedFiles: Set<string>;
     declare _collapsedDirs: Set<string>;
     declare _selectedFile: string;
+    declare _ctxMenu: { path: string; x: number; y: number } | null;
 
     private _payload: CommitPayload | null = null;
     private _files: FileDiff[] = [];
@@ -209,11 +226,59 @@ export class YorgitCommitDetail extends LitElement {
         this._collapsedFiles = new Set();
         this._collapsedDirs = new Set();
         this._selectedFile = '';
+        this._ctxMenu = null;
         this._payload = window.__YORGIT_COMMIT__ ?? null;
         if (this._payload) {
             this._files = parseDiff(this._payload.rawDiff);
             this._treeNodes = buildTree(this._files);
         }
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        // mousedown en capture : un clic sur un en-tête de fichier ne doit pas laisser le menu ouvert.
+        document.addEventListener(
+            'mousedown',
+            (e: MouseEvent) => {
+                const menu = this.renderRoot.querySelector('.ctx-menu');
+                if (this._ctxMenu && !(menu && e.composedPath().includes(menu))) {
+                    this._ctxMenu = null;
+                }
+            },
+            true,
+        );
+        // Un clic ailleurs dans VS Code n'émet aucun événement souris dans la webview, seulement un blur.
+        window.addEventListener('blur', () => {
+            this._ctxMenu = null;
+        });
+        document.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                this._ctxMenu = null;
+            }
+        });
+    }
+
+    private _openFile(path: string) {
+        const file = this._files.find(f => f.path === path);
+        vscode.postMessage({ type: 'open-file', path, deleted: file?.deleted ?? false });
+    }
+
+    private _openCtxMenu(e: MouseEvent, path: string) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Recalé pour que le menu (~200×120px) reste dans la fenêtre.
+        const x = Math.max(0, Math.min(e.clientX, window.innerWidth - 210));
+        const y = Math.max(0, Math.min(e.clientY, window.innerHeight - 120));
+        this._ctxMenu = { path, x, y };
+    }
+
+    private _ctxAction(action: () => void) {
+        action();
+        this._ctxMenu = null;
+    }
+
+    private _copy(kind: 'name' | 'relative' | 'absolute', path: string) {
+        vscode.postMessage({ type: 'copy', kind, path });
     }
 
     private _toggleFile(path: string) {
@@ -381,8 +446,11 @@ export class YorgitCommitDetail extends LitElement {
         }
 
         /* ── Diff viewer ── */
+        /* min-width: 0 : sans lui, l'item flex s'élargit à la ligne la plus longue (coupée par
+           .detail-body) et le scroll horizontal de .diff-lines-scroll ne se déclenche jamais. */
         .diff-viewer {
             flex: 1;
+            min-width: 0;
             overflow-y: auto;
             font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
             font-size: var(--vscode-editor-font-size, 12px);
@@ -426,6 +494,15 @@ export class YorgitCommitDetail extends LitElement {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .file-link {
+            cursor: pointer;
+        }
+
+        .file-link:hover {
+            text-decoration: underline;
+            color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
         }
 
         .diff-file-stat {
@@ -472,6 +549,38 @@ export class YorgitCommitDetail extends LitElement {
             color: var(--vscode-descriptionForeground);
             font-style: italic;
             padding: 2px 10px;
+        }
+
+        /* ── Context menu ── */
+        .ctx-menu {
+            position: fixed;
+            z-index: 1000;
+            background: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+            border-radius: 4px;
+            padding: 4px 0;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            font-size: 12px;
+        }
+
+        .ctx-menu-item {
+            padding: 5px 12px;
+            cursor: pointer;
+            color: var(--vscode-menu-foreground);
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .ctx-menu-item:hover {
+            background: var(--vscode-menu-selectionBackground);
+            color: var(--vscode-menu-selectionForeground);
+        }
+
+        .ctx-menu-separator {
+            height: 1px;
+            background: var(--vscode-menu-separatorBackground, var(--vscode-panel-border));
+            margin: 3px 0;
         }
 
         /* ── Empty state ── */
@@ -535,7 +644,10 @@ export class YorgitCommitDetail extends LitElement {
                 <div
                     class="tree-node ${selected ? 'selected-file' : ''}"
                     style="padding-left:${indent + 14}px"
+                    title=${node.fullPath}
                     @click=${() => this._scrollToFile(node.fullPath)}
+                    @dblclick=${() => this._openFile(node.fullPath)}
+                    @contextmenu=${(e: MouseEvent) => this._openCtxMenu(e, node.fullPath)}
                 >
                     <span class="tree-icon">${this._iconFile}</span>
                     <span class="tree-name">${node.name}</span>
@@ -551,10 +663,24 @@ export class YorgitCommitDetail extends LitElement {
 
         return html`
             <div class="diff-file" id="${id}">
-                <div class="diff-file-header" @click=${() => this._toggleFile(file.path)}>
+                <div
+                    class="diff-file-header"
+                    @click=${() => this._toggleFile(file.path)}
+                    @contextmenu=${(e: MouseEvent) => this._openCtxMenu(e, file.path)}
+                >
                     <span class="diff-chevron ${collapsed ? '' : 'open'}">${this._iconChevron}</span>
                     <span class="tree-icon" style="opacity:0.65">${this._iconFile}</span>
-                    <span class="diff-file-path">${file.path}</span>
+                    <span class="diff-file-path">
+                        <span
+                            class="file-link"
+                            title=${L.openFile}
+                            @click=${(e: MouseEvent) => {
+                                e.stopPropagation();
+                                this._openFile(file.path);
+                            }}
+                            >${file.path}</span
+                        >
+                    </span>
                     <span class="diff-file-stat">
                         ${file.added > 0 ? html`<span class="stat-add">+${file.added}</span>` : ''}
                         ${file.removed > 0 ? html`<span class="stat-del"> -${file.removed}</span>` : ''}
@@ -605,6 +731,31 @@ export class YorgitCommitDetail extends LitElement {
                           </div>
                       </div>
                   `}
+            ${this.renderCtxMenu()}
+        `;
+    }
+
+    private renderCtxMenu() {
+        const menu = this._ctxMenu;
+        if (!menu) {
+            return nothing;
+        }
+        return html`
+            <div class="ctx-menu" style="left:${menu.x}px;top:${menu.y}px">
+                <div class="ctx-menu-item" @click=${() => this._ctxAction(() => this._openFile(menu.path))}>
+                    ${L.openFile}
+                </div>
+                <div class="ctx-menu-separator"></div>
+                <div class="ctx-menu-item" @click=${() => this._ctxAction(() => this._copy('name', menu.path))}>
+                    ${L.copyName}
+                </div>
+                <div class="ctx-menu-item" @click=${() => this._ctxAction(() => this._copy('relative', menu.path))}>
+                    ${L.copyRelative}
+                </div>
+                <div class="ctx-menu-item" @click=${() => this._ctxAction(() => this._copy('absolute', menu.path))}>
+                    ${L.copyAbsolute}
+                </div>
+            </div>
         `;
     }
 }

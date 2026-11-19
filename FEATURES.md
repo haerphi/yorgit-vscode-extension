@@ -63,6 +63,7 @@
 - [x] Historique des commits via `git log`
 - [x] Graphe visuel des commits
 - [x] Inspection d'un commit (diff détaillé) dans un onglet dédié par commit examiné
+- [x] Détail de commit : ouvrir un fichier (clic sur le chemin dans l'en-tête, double-clic dans l'arbre ; version du commit si absent du working tree), menu contextuel pour copier le nom, le chemin relatif ou complet, scroll horizontal des lignes longues
 - [x] Scroll horizontal du diff dans l'inspection d'un commit (lignes longues visibles en entier, plus de troncature)
 - [x] Filtres : par auteur, message, SHA, date
 - [x] Filtre par branches dans l'historique : sélection multiple des branches locales/distantes à afficher (recherche, « Toutes », « Courante uniquement »), graphe recalculé via `git log <refs>`, sélection mémorisée par workspace

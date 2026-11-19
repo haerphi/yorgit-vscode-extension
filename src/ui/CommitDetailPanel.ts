@@ -1,5 +1,6 @@
 import { API } from '@haerphi/vscode-git-api-types';
 import { randomBytes } from 'crypto';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveWebviewLocale } from '../config';
 import { runGit } from '../git/git-exec';
@@ -15,6 +16,10 @@ interface CommitPayload extends CommitMeta {
     shortHash: string;
     rawDiff: string;
 }
+
+type WebviewMessage =
+    | { type: 'open-file'; path: string; deleted: boolean }
+    | { type: 'copy'; kind: 'name' | 'relative' | 'absolute'; path: string };
 
 /**
  * WebviewPanel dédié aux modifications d'un commit — un onglet par commit examiné.
@@ -79,6 +84,21 @@ export class CommitDetailPanel {
         panel.onDidDispose(() => {
             CommitDetailPanel._panels.delete(hash);
         });
+        panel.webview.onDidReceiveMessage(async (msg: WebviewMessage) => {
+            const fileUri = vscode.Uri.joinPath(repo.rootUri, msg.path);
+            if (msg.type === 'open-file') {
+                await CommitDetailPanel._openFile(gitApi, fileUri, hash, parentHashes, msg.deleted);
+            } else if (msg.type === 'copy') {
+                const text =
+                    msg.kind === 'name'
+                        ? path.posix.basename(msg.path)
+                        : msg.kind === 'relative'
+                          ? msg.path
+                          : fileUri.fsPath;
+                await vscode.env.clipboard.writeText(text);
+                vscode.window.showInformationMessage(vscode.l10n.t('"{0}" copied.', text));
+            }
+        });
 
         panel.webview.html = CommitDetailPanel._buildHtml(panel.webview, context, {
             hash,
@@ -86,6 +106,39 @@ export class CommitDetailPanel {
             ...meta,
             rawDiff,
         });
+    }
+
+    /**
+     * Ouvre la version du working tree si elle existe encore ; sinon la version du commit
+     * (ou du parent si le commit a supprimé le fichier) via une URI `git:` en lecture seule.
+     */
+    private static async _openFile(
+        gitApi: API,
+        fileUri: vscode.Uri,
+        hash: string,
+        parentHashes: string[],
+        deleted: boolean,
+    ): Promise<void> {
+        try {
+            let target = fileUri;
+            try {
+                await vscode.workspace.fs.stat(fileUri);
+            } catch {
+                const ref = deleted ? parentHashes[0] : hash;
+                if (!ref) {
+                    vscode.window.showErrorMessage(
+                        vscode.l10n.t('File "{0}" no longer exists.', vscode.workspace.asRelativePath(fileUri)),
+                    );
+                    return;
+                }
+                target = gitApi.toGitUri(fileUri, ref);
+            }
+            await vscode.window.showTextDocument(target, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+        } catch (err) {
+            vscode.window.showErrorMessage(
+                vscode.l10n.t('Failed to open file: {0}', err instanceof Error ? err.message : String(err)),
+            );
+        }
     }
 
     private static async _getCommitMeta(gitPath: string, cwd: string, hash: string): Promise<CommitMeta> {
