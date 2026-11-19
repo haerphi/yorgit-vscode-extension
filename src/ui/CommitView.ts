@@ -96,11 +96,13 @@ export class CommitView implements vscode.WebviewViewProvider {
         const head = this._repo.state.HEAD;
         const ahead = head?.ahead ?? 0;
         const behind = head?.behind ?? 0;
+        const localOnly = !detachedHead && head?.name !== undefined && head.upstream === undefined;
         this._webviewView.webview.postMessage({
             type: 'update',
             stagedCount,
             lastCommit,
             detachedHead,
+            localOnly,
             rebaseState,
             ahead,
             behind,

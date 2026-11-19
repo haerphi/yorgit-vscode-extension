@@ -25,6 +25,8 @@ const L = pick(
         commitButton: 'Commit',
         detachedWarning: '⚠ Detached HEAD — create a branch to avoid losing your commits.',
         createBranch: '+ Create branch',
+        localOnlyWarning: '⚠ Local branch only — not published on any remote.',
+        publishButton: '↑ Publish',
         titlePlaceholder: 'Commit title',
         descriptionPlaceholder: 'Description (optional)',
         amendLabel: 'Amend last commit',
@@ -46,6 +48,8 @@ const L = pick(
         commitButton: 'Commit',
         detachedWarning: '⚠ HEAD détachée — créez une branche pour ne pas perdre vos commits.',
         createBranch: '+ Créer une branche',
+        localOnlyWarning: '⚠ Branche locale uniquement — non publiée sur un remote.',
+        publishButton: '↑ Publier',
         titlePlaceholder: 'Titre du commit',
         descriptionPlaceholder: 'Description (optionnel)',
         amendLabel: 'Amender le dernier commit',
@@ -73,6 +77,7 @@ type ProviderMessage =
           stagedCount: number;
           lastCommit: LastCommit | null;
           detachedHead: boolean;
+          localOnly: boolean;
           rebaseState: RebaseState | null;
           ahead: number;
           behind: number;
@@ -90,6 +95,7 @@ export class YorgitCommit extends LitElement {
         committing: { type: Boolean },
         errorMessage: { type: String },
         detachedHead: { type: Boolean },
+        localOnly: { type: Boolean },
         rebaseState: { type: Object },
         ahead: { type: Number },
         behind: { type: Number },
@@ -103,6 +109,7 @@ export class YorgitCommit extends LitElement {
     declare committing: boolean;
     declare errorMessage: string;
     declare detachedHead: boolean;
+    declare localOnly: boolean;
     declare rebaseState: RebaseState | null;
     declare ahead: number;
     declare behind: number;
@@ -117,6 +124,7 @@ export class YorgitCommit extends LitElement {
         this.committing = false;
         this.errorMessage = '';
         this.detachedHead = false;
+        this.localOnly = false;
         this.rebaseState = null;
         this.ahead = 0;
         this.behind = 0;
@@ -130,6 +138,7 @@ export class YorgitCommit extends LitElement {
                 this.stagedCount = msg.stagedCount;
                 this.lastCommit = msg.lastCommit;
                 this.detachedHead = msg.detachedHead;
+                this.localOnly = msg.localOnly ?? false;
                 this.rebaseState = msg.rebaseState ?? null;
                 this.ahead = msg.ahead ?? 0;
                 this.behind = msg.behind ?? 0;
@@ -356,6 +365,28 @@ export class YorgitCommit extends LitElement {
             background: rgba(224, 154, 78, 0.2);
         }
 
+        .local-only-warning {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            line-height: 1.4;
+            color: var(--vscode-editorWarning-foreground, #e09a4e);
+            background: rgba(224, 154, 78, 0.12);
+            border: 1px solid var(--vscode-editorWarning-foreground, #e09a4e);
+            border-radius: 3px;
+            padding: 3px 6px;
+            margin-bottom: 6px;
+        }
+
+        .local-only-warning span {
+            flex: 1;
+        }
+
+        .local-only-warning .btn-create-branch {
+            padding: 1px 6px;
+        }
+
         /* ── Panneau rebase en cours ─────────────────────────────────────── */
         .rebase-panel {
             display: flex;
@@ -520,6 +551,14 @@ export class YorgitCommit extends LitElement {
                                 <span class="sync-icon">↑</span> ${L.pushButton(this.ahead)}
                             </button>`
                           : nothing}
+                  </div>`
+                : nothing}
+            ${this.localOnly
+                ? html`<div class="local-only-warning">
+                      <span>${L.localOnlyWarning}</span>
+                      <button class="btn-create-branch" @click=${() => vscode.postMessage({ type: 'push' })}>
+                          ${L.publishButton}
+                      </button>
                   </div>`
                 : nothing}
             <input

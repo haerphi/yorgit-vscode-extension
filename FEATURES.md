@@ -54,6 +54,7 @@
 - [x] Synchronisation distante : Fetch / Pull / Push
 - [x] Modale de push (branche, remote cible, tous les tags, mode normal / `--force-with-lease` / `--force` avec warning)
 - [x] Le select "To" de la modale de push affiche `remote/branche` en direct (suit le select "Branch" via interpolation `${id}` générique dans ConfirmModal)
+- [x] Bandeau warning au-dessus du titre de commit quand la branche courante est uniquement locale (sans upstream), avec bouton « Publier »
 
 ---
 
