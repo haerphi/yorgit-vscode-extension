@@ -57,6 +57,12 @@ const L = pick(
         cancel: 'Cancel',
         running: 'Rebase in progress…',
         start: 'Start rebase',
+        keepMerges: 'Keep merges',
+        keepMergesHint:
+            'Run git rebase --rebase-merges: merge commits of the branch are recreated instead of being flattened. Commit order is locked in this mode.',
+        keepMergesBanner:
+            'Merge commits will be kept (--rebase-merges). Commit order is locked; squash/fixup must follow a commit of the same branch.',
+        orderLocked: 'Order is locked while keeping merges',
     },
     {
         moveUp: 'Monter',
@@ -101,11 +107,17 @@ const L = pick(
         cancel: 'Annuler',
         running: 'Rebase en cours…',
         start: 'Lancer le rebase',
+        keepMerges: 'Conserver les merges',
+        keepMergesHint:
+            "Lance git rebase --rebase-merges : les commits de merge de la branche sont recréés au lieu d'être aplatis. L'ordre des commits est figé dans ce mode.",
+        keepMergesBanner:
+            "Les commits de merge seront conservés (--rebase-merges). L'ordre des commits est figé ; un squash/fixup doit suivre un commit de la même branche.",
+        orderLocked: "L'ordre est figé quand les merges sont conservés",
     },
 );
 
 type HostMessage =
-    | { type: 'entries'; entries: RebaseEntry[]; upstreamLabel: string }
+    | { type: 'entries'; entries: RebaseEntry[]; upstreamLabel: string; hasMerges: boolean }
     | { type: 'error'; message: string }
     | { type: 'running' }
     | { type: 'done' }
@@ -212,6 +224,8 @@ export class YorgitRebase extends LitElement {
         _dragOverIdx: { state: true },
         _reversed: { state: true },
         _showPreview: { state: true },
+        _hasMerges: { state: true },
+        _keepMerges: { state: true },
     };
 
     declare _entries: RebaseEntry[];
@@ -231,6 +245,10 @@ export class YorgitRebase extends LitElement {
     declare _reversed: boolean;
     // Affiche/masque le volet "Résultat final" — purement une préférence d'affichage.
     declare _showPreview: boolean;
+    declare _hasMerges: boolean;
+    // --rebase-merges : git génère lui-même la topologie du todo, le host n'y reporte
+    // que les actions — d'où l'ordre figé tant que ce mode est actif.
+    declare _keepMerges: boolean;
 
     // Snapshot des entrées telles que reçues du host — permet le reset.
     private _initialEntries: RebaseEntry[] = [];
@@ -251,6 +269,8 @@ export class YorgitRebase extends LitElement {
         // libre de basculer à tout moment.
         this._reversed = window.__YORGIT_REBASE_DEFAULT_ORDER__ === 'newest-first';
         this._showPreview = false;
+        this._hasMerges = false;
+        this._keepMerges = false;
     }
 
     connectedCallback() {
@@ -261,6 +281,7 @@ export class YorgitRebase extends LitElement {
                 this._initialEntries = msg.entries.map(e => ({ ...e }));
                 this._entries = msg.entries;
                 this._upstreamLabel = msg.upstreamLabel;
+                this._hasMerges = msg.hasMerges;
                 this._loading = false;
             } else if (msg.type === 'error') {
                 this._error = msg.message;
@@ -280,7 +301,7 @@ export class YorgitRebase extends LitElement {
     }
 
     private _moveUp(idx: number) {
-        if (idx === 0) {
+        if (idx === 0 || this._keepMerges) {
             return;
         }
         const entries = [...this._entries];
@@ -289,7 +310,7 @@ export class YorgitRebase extends LitElement {
     }
 
     private _moveDown(idx: number) {
-        if (idx >= this._entries.length - 1) {
+        if (idx >= this._entries.length - 1 || this._keepMerges) {
             return;
         }
         const entries = [...this._entries];
@@ -305,7 +326,7 @@ export class YorgitRebase extends LitElement {
      */
     private _onRowMouseDown(e: MouseEvent) {
         const row = e.currentTarget as HTMLElement;
-        row.draggable = !(e.target as HTMLElement).closest('select, input');
+        row.draggable = !this._keepMerges && !(e.target as HTMLElement).closest('select, input');
     }
 
     /**
@@ -314,7 +335,7 @@ export class YorgitRebase extends LitElement {
      * partir un drag de toute la ligne au lieu de l'interaction attendue.
      */
     private _onDragStart(e: DragEvent, idx: number) {
-        if ((e.target as HTMLElement).closest('select, input')) {
+        if (this._keepMerges || (e.target as HTMLElement).closest('select, input')) {
             e.preventDefault();
             return;
         }
@@ -377,7 +398,21 @@ export class YorgitRebase extends LitElement {
     }
 
     private _start() {
-        vscode.postMessage({ type: 'start', entries: this._entries });
+        vscode.postMessage({ type: 'start', entries: this._entries, rebaseMerges: this._keepMerges });
+    }
+
+    /**
+     * En activant le mode, on remet les commits dans leur ordre d'origine (actions
+     * conservées) : un ordre modifié resterait affiché alors que git ne l'appliquera pas.
+     */
+    private _toggleKeepMerges() {
+        this._keepMerges = !this._keepMerges;
+        if (this._keepMerges) {
+            const rank = new Map(this._initialEntries.map((e, i) => [e.hash, i]));
+            this._entries = [...this._entries].sort((a, b) => (rank.get(a.hash) ?? 0) - (rank.get(b.hash) ?? 0));
+        }
+        this._draggingIdx = null;
+        this._dragOverIdx = null;
     }
 
     private _cancel() {
@@ -604,6 +639,19 @@ export class YorgitRebase extends LitElement {
 
         .entry-row:hover {
             background: var(--vscode-list-hoverBackground);
+        }
+
+        .entry-row.locked {
+            cursor: default;
+        }
+
+        .info-banner {
+            margin: 8px 16px;
+            padding: 8px 12px;
+            background: color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent);
+            border: 1px solid var(--vscode-focusBorder);
+            border-radius: 4px;
+            font-size: 12px;
         }
 
         .entry-row.dragging {
@@ -893,8 +941,9 @@ export class YorgitRebase extends LitElement {
      *                   pour savoir si la ligne est visuellement première/dernière.
      */
     private renderEntry(entry: RebaseEntry, realIdx: number, displayIdx: number, total: number) {
-        const isFirst = displayIdx === 0;
-        const isLast = displayIdx === total - 1;
+        const locked = this._keepMerges;
+        const isFirst = locked || displayIdx === 0;
+        const isLast = locked || displayIdx === total - 1;
         // Le badge reprend l'en-tête conventionnel, le message n'affiche donc que la
         // description — le message réel envoyé à git reste évidemment intact.
         const conventional = parseConventional(entry.message);
@@ -906,6 +955,7 @@ export class YorgitRebase extends LitElement {
         const rowClasses = [
             'entry-row',
             entry.action === 'drop' ? 'drop' : '',
+            this._keepMerges ? 'locked' : '',
             this._draggingIdx === realIdx ? 'dragging' : '',
             this._dragOverIdx === realIdx && this._draggingIdx !== realIdx ? 'drag-over' : '',
         ]
@@ -921,7 +971,7 @@ export class YorgitRebase extends LitElement {
             <div
                 class=${rowClasses}
                 style=${accent ? `--accent: ${accent}` : ''}
-                draggable="true"
+                draggable=${locked ? 'false' : 'true'}
                 @mousedown=${(e: MouseEvent) => this._onRowMouseDown(e)}
                 @dragstart=${(e: DragEvent) => this._onDragStart(e, realIdx)}
                 @dragover=${(e: DragEvent) => this._onDragOver(e, realIdx)}
@@ -929,7 +979,7 @@ export class YorgitRebase extends LitElement {
                 @dragend=${() => this._onDragEnd()}
             >
                 <div class="order-cell">
-                    <span class="drag-handle" title=${L.dragHint}>⠿</span>
+                    <span class="drag-handle" title=${locked ? L.orderLocked : L.dragHint}>${locked ? '' : '⠿'}</span>
                     <div class="move-btns">
                         <div
                             class="move-btn ${isFirst ? 'disabled' : ''}"
@@ -1037,7 +1087,9 @@ export class YorgitRebase extends LitElement {
         const total = this._entries.length;
         // Le bouton ne s'active que si le regroupement changerait réellement le plan —
         // scopes déjà contigus, scope unique ou aucun scope : rien à faire.
-        const canGroup = groupEntriesByScope(this._entries).some((e, i) => e !== this._entries[i]);
+        const canGroup =
+            !this._keepMerges &&
+            groupEntriesByScope(this._entries).some((e, i) => e !== this._entries[i]);
         // La liste affichée ne fait qu'inverser l'ordre de rendu — realIdx conserve
         // la position dans this._entries pour que les mutations restent correctes.
         const displayList = this._entries.map((entry, realIdx) => ({ entry, realIdx }));
@@ -1052,9 +1104,19 @@ export class YorgitRebase extends LitElement {
                     <div class="header-sub">${L.headerSub(total, this._reversed)}</div>
                 </div>
                 <div class="header-actions">
+                    ${this._hasMerges
+                        ? html`<button
+                              class="btn-toggle ${this._keepMerges ? 'active' : ''}"
+                              title=${L.keepMergesHint}
+                              ?disabled=${this._running}
+                              @click=${this._toggleKeepMerges}
+                          >
+                              ⑂ ${L.keepMerges}
+                          </button>`
+                        : ''}
                     <button
                         class="btn-toggle"
-                        title=${canGroup ? L.groupHint : L.groupHintDisabled}
+                        title=${canGroup ? L.groupHint : this._keepMerges ? L.orderLocked : L.groupHintDisabled}
                         ?disabled=${!canGroup || this._running}
                         @click=${this._groupByScope}
                     >
@@ -1072,6 +1134,7 @@ export class YorgitRebase extends LitElement {
                     </button>
                 </div>
             </div>
+            ${this._keepMerges ? html`<div class="info-banner">${L.keepMergesBanner}</div>` : ''}
             ${this._rebaseError ? html`<div class="error-banner">${this._rebaseError}</div>` : ''}
             ${this._done ? html`<div class="done-banner">${L.done}</div>` : ''}
             <div class="body-split">

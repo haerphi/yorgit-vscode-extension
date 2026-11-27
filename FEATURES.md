@@ -78,6 +78,7 @@
 - [x] Cherry-pick
 - [x] Revert (commit inverse)
 - [x] Rebase simple
+- [x] Rebase simple : bouton « Rebaser (conserver les merges) » (`git rebase --rebase-merges`) proposé dans la confirmation quand la branche courante contient des commits de merge
 - [x] Rebase interactif (réordonner, squash/fixup, drop) _(WebviewPanel)_
 - [x] Code couleur par action dans le rebase interactif (bordure gauche + fond teinté par ligne : orange=reword, bleu=squash, violet=fixup, rouge+barré=drop, neutre=pick)
 - [x] Glisser-déposer pour réordonner les commits du rebase interactif (en plus des flèches Haut/Bas, conservées pour l'accessibilité clavier)
@@ -85,6 +86,7 @@
 - [x] Bouton pour inverser l'ordre d'affichage du rebase interactif (plus récent en haut) — vue seulement, l'ordre envoyé à git reste toujours plus ancien en premier
 - [x] Badge de scope Conventional Commits sur chaque ligne du rebase interactif (`feat(frontend)` → badge « frontend » de couleur stable, le message n'affiche plus que la description ; badge gris pour les commits sans scope, aucun badge pour les messages non conventionnels)
 - [x] Bouton « Grouper par scope » dans le rebase interactif — rassemble les commits d'un même scope (frontend, backend, infra…), ordre chronologique conservé dans chaque groupe, commits sans scope en fin de liste ; désactivé quand le regroupement ne changerait rien
+- [x] Bouton « Conserver les merges » dans le rebase interactif (affiché si la plage contient des merges) : lance `git rebase -i --rebase-merges` en reportant les actions choisies sur le todo généré par git ; ordre des commits figé dans ce mode, squash/fixup refusé s'il ne suit pas un commit de la même branche
 - [x] Volet "Aperçu" rétractable montrant le résultat final du rebase (squash/fixup fondus, drop exclus, reword avec le nouveau message) avant de cliquer sur "Lancer le rebase"
 - [x] Créer une branche sur un commit (menu contextuel de l'historique) : nom, option « basculer dessus » et, si cochée, option « forcer » (`git switch -f -c`)
 - [x] Ajouter un tag sur un commit (depuis l'historique, avec push optionnel)
